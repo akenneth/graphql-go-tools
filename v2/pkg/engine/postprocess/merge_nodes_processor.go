@@ -1,6 +1,8 @@
 package postprocess
 
 import (
+	"slices"
+
 	"github.com/wundergraph/graphql-go-tools/v2/pkg/engine/resolve"
 )
 
@@ -14,33 +16,42 @@ func (m *mergeSameSourceFetches) ProcessFetchTree(root *resolve.FetchTreeNode) {
 		return
 	}
 
-	fetchGroups := make(map[string][]*resolve.FetchTreeNode)
+	// todo: does this need to dive down recursively?
+	for i := 0; i < len(root.ChildNodes); i++ {
+		// union single fetches only for now
+		if !(root.ChildNodes[i].Kind == resolve.FetchTreeNodeKindSingle) {
+			continue
+		}
 
-	// todo: consider dependencies when merging
-	for _, node := range root.ChildNodes {
-		// todo: does this need to dive down recursively?
-		if node.Kind == resolve.FetchTreeNodeKindSingle {
-			info := node.Item.Fetch.DataSourceInfo()
-			key := info.ID // + string(node.Item.Fetch.(*resolve.SingleFetch).InputTemplate...)
-			fetchGroups[key] = append(fetchGroups[key], node)
+		providedFetchIDs := resolveProvidedFetchIDs(root.ChildNodes[:i])
+		union := resolve.Union(root.ChildNodes[i])
+		sourceId := root.ChildNodes[i].Item.Fetch.DataSourceInfo().ID
+
+		for j := i + 1; j < len(root.ChildNodes); j++ {
+			// union single fetches only for now
+			if !(root.ChildNodes[j].Kind == resolve.FetchTreeNodeKindSingle) {
+				continue
+			}
+
+			currentNodeSourceId := root.ChildNodes[j].Item.Fetch.DataSourceInfo().ID
+			if m.dependenciesCanBeProvided(root.ChildNodes[j], providedFetchIDs) && sourceId == currentNodeSourceId {
+				union.ChildNodes = append(union.ChildNodes, root.ChildNodes[j])
+				root.ChildNodes = append(root.ChildNodes[:j], root.ChildNodes[j+1:]...)
+				j--
+			}
+		}
+		if len(union.ChildNodes) > 1 {
+			root.ChildNodes[i] = union
 		}
 	}
-
-	var mergedNodes []*resolve.FetchTreeNode
-	for _, group := range fetchGroups {
-		if len(group) > 1 {
-			mergedNode := mergeFetchNodes(group)
-			mergedNodes = append(mergedNodes, mergedNode)
-		} else {
-			mergedNodes = append(mergedNodes, group[0])
-		}
-	}
-
-	root.ChildNodes = mergedNodes
 }
 
-func mergeFetchNodes(nodes []*resolve.FetchTreeNode) *resolve.FetchTreeNode {
-	mergedNode := resolve.Union(nodes[0])
-	mergedNode.ChildNodes = append(mergedNode.ChildNodes, nodes[1:]...)
-	return mergedNode
+func (c *mergeSameSourceFetches) dependenciesCanBeProvided(node *resolve.FetchTreeNode, providedFetchIDs []int) bool {
+	deps := node.Item.Fetch.Dependencies()
+	for _, dep := range deps.DependsOnFetchIDs {
+		if !slices.Contains(providedFetchIDs, dep) {
+			return false
+		}
+	}
+	return true
 }

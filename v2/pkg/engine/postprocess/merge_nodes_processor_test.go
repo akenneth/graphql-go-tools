@@ -46,30 +46,34 @@ func TestMergeSameSourceFetches_ProcessFetchTree(t *testing.T) {
 			resolve.Single(&resolve.SingleFetch{
 				FetchDependencies:    resolve.FetchDependencies{FetchID: 0},
 				DataSourceIdentifier: []byte(resolve.DataSourceInfo{ID: "1", Name: "a"}.ID),
+				Info:                 &resolve.FetchInfo{DataSourceID: "1", DataSourceName: "a"},
 			}),
-			resolve.Parallel(
-				resolve.Single(&resolve.SingleFetch{
-					FetchDependencies: resolve.FetchDependencies{
-						FetchID:           1,
-						DependsOnFetchIDs: []int{0},
-					},
-					DataSourceIdentifier: []byte(resolve.DataSourceInfo{ID: "1", Name: "a"}.ID),
-				}),
+			resolve.Single(&resolve.SingleFetch{
+				FetchDependencies: resolve.FetchDependencies{
+					FetchID:           1,
+					DependsOnFetchIDs: []int{0},
+				},
+				DataSourceIdentifier: []byte(resolve.DataSourceInfo{ID: "1", Name: "a"}.ID),
+				Info:                 &resolve.FetchInfo{DataSourceID: "1", DataSourceName: "a"},
+			}),
+			resolve.Union(
 				resolve.Single(&resolve.SingleFetch{
 					FetchDependencies: resolve.FetchDependencies{
 						FetchID:           2,
 						DependsOnFetchIDs: []int{0},
 					},
-					DataSourceIdentifier: []byte(resolve.DataSourceInfo{ID: "1", Name: "a"}.ID),
+					DataSourceIdentifier: []byte(resolve.DataSourceInfo{ID: "2", Name: "b"}.ID),
+					Info:                 &resolve.FetchInfo{DataSourceID: "2", DataSourceName: "b"},
+				}),
+				resolve.Single(&resolve.SingleFetch{
+					FetchDependencies: resolve.FetchDependencies{
+						FetchID:           3,
+						DependsOnFetchIDs: []int{1},
+					},
+					DataSourceIdentifier: []byte(resolve.DataSourceInfo{ID: "2", Name: "b"}.ID),
+					Info:                 &resolve.FetchInfo{DataSourceID: "2", DataSourceName: "b"},
 				}),
 			),
-			resolve.Single(&resolve.SingleFetch{
-				FetchDependencies: resolve.FetchDependencies{
-					FetchID:           3,
-					DependsOnFetchIDs: []int{1},
-				},
-				DataSourceIdentifier: []byte(resolve.DataSourceInfo{ID: "1", Name: "a"}.ID),
-			}),
 		)
 		require.Equal(t, expected, input)
 	})
